@@ -45,6 +45,8 @@ namespace RngSpec
 			return sb.ToString();
 		}
 
+		public List<Element> ChildElements { get; } = new List<Element>();
+
 		private readonly Dictionary<string, int> candidateNames = new Dictionary<string, int>();
 
 		public void AddCandidateName(string name)
@@ -61,6 +63,11 @@ namespace RngSpec
 		}
 	}
 
+	public enum Combine
+	{
+		
+	}
+
 	public class XsElement : Element
 	{
 		public XElement XElement { get; set; }
@@ -69,6 +76,35 @@ namespace RngSpec
 		{
 			AddCandidateName(element.Name.LocalName);
 			XElement = element;
+		}
+		
+		public Element Expand(Dictionary<string, Element> defines)
+		{
+			var ce = XElement.Elements().First();
+			switch (ce.Name.LocalName)
+			{
+				case "group":
+					break;
+				case "mixed":
+					break;
+				case "interleave":
+					break;
+				case "optional":
+					break;
+				case "ref":
+					return defines[ce.Attribute(XName.Get("name")).Value];
+				case "choice":
+					break;
+				case "element":
+					break;
+				case "attribute":
+					break;
+				case "text":
+					break;
+				case "empty":
+					break;
+			}
+			return this;
 		}
 	}
 
@@ -142,8 +178,34 @@ namespace RngSpec
 				nsMap[a.Name.LocalName] = a.Value;
 			start = grammar.Element(XName.Get("start"));
 			if(start == null) throw new Exception("No start element");
+
+			var nameMap = new Dictionary<string, XElement>();
 			foreach (var d in grammar.Elements(XName.Get("define")))
-				defines[d.Attribute(XName.Get("name")).Value] = new XsElement(d);
+			{
+				var dName = d.Attribute(XName.Get("name"))?.Value;
+				if(dName == null)
+					throw new Exception("A define has no name attribute");
+				var combine = d.Attribute(XName.Get("combine"));
+				if (combine == null)
+					nameMap[dName] = d;
+				else
+				{
+					XElement existing;
+					if (!nameMap.TryGetValue(dName, out existing))
+					{
+						existing = new XElement(d.Name);
+						existing.SetAttributeValue(XName.Get("name"), dName);
+						existing.SetAttributeValue(XName.Get("combine"), combine.Value);
+						existing.Add(new XElement(XName.Get(combine.Value)));
+						nameMap.Add(dName, existing);
+					}
+					if(existing.Attribute(XName.Get("combine"))?.Value != combine.Value)
+						throw new Exception("Mismatched combine attributes for " + dName);
+					existing.Elements().First().Add(d.Elements());
+				}
+			}
+			foreach (var pair in nameMap)
+				defines[pair.Key] = new XsElement(pair.Value);
 		}
 
 		void Expand(ref Element e)
